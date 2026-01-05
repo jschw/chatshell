@@ -12,6 +12,7 @@ import os, appdirs, time, json, uuid, re
 from datetime import datetime
 from multiprocessing import Process, Event
 import pyperclip
+import sys
 from .llm_server import LocalLLMServer
 from .context_manager import ContextManager
 
@@ -19,7 +20,7 @@ from .context_manager import ContextManager
 class Chatshell:
 
     def __init__(self, termux_paths=False):
-        self.version = "0.2.0"
+        self.version = "0.3.0"
         self.process = None
         self.shutdown_event = None
 
@@ -423,7 +424,7 @@ class Chatshell:
 
                     if args[0] == "/setprompt":
                         # Add additional prompt for summarization
-                        context_manager.summarize_additional_prompt = " ".join(last_user_message.split()[2:]).replace("\"", "")
+                        context_manager.summarize_additional_prompt = " ".join(last_user_message.split()[2:]).strip().replace("\"", "")
                         stream_response = generate_chat_completion_chunks("Additional prompt for summarization set, you can now request a summary.")
                         return EventSourceResponse(event_generator(stream_response))
 
@@ -554,6 +555,67 @@ class Chatshell:
                             stream_response = generate_chat_completion_chunks(f"Loading task {args[0]} was successful.")
                             return EventSourceResponse(event_generator(stream_response))
 
+                if command == "/listtasks":
+                    # List all tasks and output as markdown table
+                    tasks = context_manager.list_all_tasks()
+                    if not tasks:
+                        table_md = "No tasks found."
+                    else:
+                        headers = [
+                            "Task Name",
+                            "RAG Content List",
+                            "RAG Update Time",
+                            "Summarize Input",
+                            "Summarize Prompt",
+                            "Task Type"
+                        ]
+                        table_md = "| " + " | ".join(headers) + " |\n"
+                        table_md += "|---" * len(headers) + "|\n"
+                        for t in tasks:
+                            row = [
+                                str(t.get("taskname", "")),
+                                str(t.get("rag_content_list", "")),
+                                str(t.get("rag_update_time", "")),
+                                str(t.get("summarize_input", "")),
+                                str(t.get("summarize_additional_prompt", "")),
+                                str(t.get("task_type", ""))
+                            ]
+                            # Truncate long content for readability
+                            row = [r if len(r) < 60 else r[:57] + "..." for r in row]
+                            table_md += "| " + " | ".join(row) + " |\n"
+
+                    stream_response = generate_chat_completion_chunks(table_md)
+                    return EventSourceResponse(event_generator(stream_response))
+                
+                if command == "/taskinfo":
+                    if len(args) != 1:
+                        stream_response = generate_chat_completion_chunks("Usage: /taskinfo <Task name>")
+                        return EventSourceResponse(event_generator(stream_response))
+
+                    else:
+                        taskname = args[0]
+                        task_info = context_manager.get_task_info(taskname)
+                        if not task_info:
+                            task_info_output = f"Task '{taskname}' not found."
+                        else:
+                            # Pretty, line-broken output with bold identifiers (markdown style)
+                            fields = [
+                                ("Task Name", str(task_info.get("taskname", ""))),
+                                ("RAG Content List", str(task_info.get("rag_content_list", ""))),
+                                ("RAG Update Time", str(task_info.get("rag_update_time", ""))),
+                                ("Summarize Input", str(task_info.get("summarize_input", ""))),
+                                ("Summarize Prompt", str(task_info.get("summarize_additional_prompt", ""))),
+                                ("Task Type", str(task_info.get("task_type", ""))),
+                            ]
+                            # Truncate long content for readability
+                            pretty_lines = []
+                            for name, value in fields:
+                                if len(value) > 200:
+                                    value = value[:197] + "..."
+                                pretty_lines.append(f"**{name}:** {value}")
+                            task_info_output = "\n".join(pretty_lines)
+                        stream_response = generate_chat_completion_chunks(task_info_output)
+                        return EventSourceResponse(event_generator(stream_response))
                 
                 if command == "/forgetall":
                     # Disable RAG and other inserted contexts
@@ -744,9 +806,19 @@ class Chatshell:
                     return EventSourceResponse(event_generator(stream_response))
                 
                 if command == "/exit":
-                    # Quit chatshell server
-                    llm_server.stop_all_processes()
-                    quit()
+                    # Properly quit chatshell server
+                    try:
+                        llm_server.stop_all_processes()
+                    except Exception as e:
+                        print(f"Error stopping LLM server processes: {e}")
+                    # Attempt to gracefully shutdown the server if possible
+                    try:
+                        if 'server' in locals() and hasattr(server, 'should_exit'):
+                            server.should_exit = True
+                    except Exception as e:
+                        print(f"Error signaling server shutdown: {e}")
+                    stream_response = generate_chat_completion_chunks("Chatshell server is shutting down.")
+                    return EventSourceResponse(event_generator(stream_response))
                 
                 # ========================================
 

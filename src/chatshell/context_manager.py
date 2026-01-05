@@ -309,3 +309,73 @@ class ContextManager:
             return "error"
         finally:
             conn.close()
+
+    def list_all_tasks(self):
+        """
+        Returns a list of all tasks with their values from the SQLite database.
+        Each task is represented as a dictionary.
+        """
+        db_path = str(self.context_manager_db_path)
+        if not os.path.exists(db_path):
+            print("DB not existing.")
+            return []
+        conn = sqlite3.connect(db_path)
+        tasks = []
+        try:
+            c = conn.cursor()
+            c.execute(
+                "SELECT taskname, rag_content_list, rag_update_time, summarize_input, summarize_additional_prompt, task_type FROM tasks"
+            )
+            rows = c.fetchall()
+            for row in rows:
+                task = {
+                    "taskname": row[0],
+                    "rag_content_list": json.loads(row[1]) if row[1] else None,
+                    "rag_update_time": row[2],
+                    "summarize_input": row[3],
+                    "summarize_additional_prompt": row[4],
+                    "task_type": row[5]
+                }
+                tasks.append(task)
+        except Exception as e:
+            print(f"Error listing all tasks: {e}")
+            return []
+        finally:
+            conn.close()
+        return tasks
+
+    def get_task_info(self, taskname):
+        """
+        Returns all info for the specific task with its values as a dictionary.
+        If the task does not exist, returns None.
+        """
+        db_path = str(self.context_manager_db_path)
+        if not os.path.exists(db_path):
+            print("DB not existing.")
+            return None
+        conn = sqlite3.connect(db_path)
+        try:
+            c = conn.cursor()
+            c.execute(
+                "SELECT taskname, rag_content_list, rag_update_time, summarize_input, summarize_additional_prompt, task_type FROM tasks WHERE taskname = ?",
+                (taskname,)
+            )
+            row = c.fetchone()
+            if row is not None:
+                task_info = {
+                    "taskname": row[0],
+                    "rag_content_list": json.loads(row[1]) if row[1] else None,
+                    "rag_update_time": row[2],
+                    "summarize_input": row[3],
+                    "summarize_additional_prompt": row[4],
+                    "task_type": row[5]
+                }
+                return task_info
+            else:
+                print("No entry found for task:", taskname)
+                return None
+        except Exception as e:
+            print(f"Error retrieving task info: {e}")
+            return None
+        finally:
+            conn.close()
