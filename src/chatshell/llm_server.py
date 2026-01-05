@@ -152,7 +152,7 @@ class LocalLLMServer:
     def refresh_config(self):
         self.llm_config = None
         self.llm_server_config = None
-        self.load_config(llm_config_path=self.llm_config_path, llm_server_config_path=self.llm_server_config_path)
+        self.load_config()
 
     def update_model_catalog(self)->bool:
         print("--> Fetching model catalog from github.com/jschw/chatshell...")

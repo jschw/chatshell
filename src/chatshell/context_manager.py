@@ -7,6 +7,7 @@ import json
 import pyperclip
 from urllib.parse import urlparse
 from PyPDF2 import PdfReader
+from .utils_rag import crawl_website
 
 class ContextManager:
     """
@@ -165,7 +166,6 @@ class ContextManager:
             # Handle as URL
             # Crawl website
             print(f"-> Crawling {input_path_url}.")
-            from vectorstore import crawl_website
             page_contents = crawl_website(input_path_url, 5, max_depth=1)
 
             if page_contents is not None and len(page_contents) > 0:
@@ -200,7 +200,6 @@ class ContextManager:
             print("--> Generated summary chunks.")
 
             self.summarize_text = text_summary
-            self.summarize_input = input_path_url
             self.task_type_summary = True
 
             return [text_summary, True]
@@ -240,6 +239,7 @@ class ContextManager:
                         task_type=excluded.task_type
                 """, (taskname, rag_content_json, self.rag_update_time, tasktype))
             elif tasktype == "summarize":
+                print(f"Summarize input: {self.summarize_input}")
                 c.execute("""
                     INSERT INTO tasks (taskname, summarize_input, summarize_additional_prompt, task_type)
                     VALUES (?, ?, ?, ?)
@@ -263,8 +263,10 @@ class ContextManager:
         Returns a dictionary with all available fields if found, otherwise None.
         """
         db_path = str(self.context_manager_db_path)
+        print(db_path)
         if not os.path.exists(db_path):
-            return None
+            print("DB not existing.")
+            return "db_err"
         conn = sqlite3.connect(db_path)
         try:
             c = conn.cursor()
@@ -273,6 +275,7 @@ class ContextManager:
                 (taskname,)
             )
             row = c.fetchone()
+            print(row)
             if row is not None:
                 # Write all values to local variables
                 self.rag_content_list               = list(json.loads(row[0])) if row[0] else None
@@ -289,15 +292,20 @@ class ContextManager:
                     # Run vectorstore update for URL(s)
                     self.rag_update_web(self.rag_content_list, False)
 
-                return {
+                result = {
                     "rag_content_list": self.rag_content_list,
                     "rag_update_time": self.rag_update_time,
                     "summarize_input": self.summarize_input,
                     "summarize_additional_prompt": self.summarize_additional_prompt,
                     "task_type": self.task_type
                 }
-            return None
-        except Exception:
-            return None
+
+                return "ok"
+            
+            print("No entry found.")
+            return "not_existing"
+        except Exception as e:
+            print(str(e))
+            return "error"
         finally:
             conn.close()

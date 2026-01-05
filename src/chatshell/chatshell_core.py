@@ -166,6 +166,62 @@ class Chatshell:
                 yield chunk_obj
                 time.sleep(0.1)  # simulate streaming delay
         
+        def generate_text_summary_chunks(sources:list)->str:
+            list_input_sources = []
+            list_input_content = []
+
+            for source in sources:
+                # process all inputs for summarization
+                summary_result , summary_generation_ok = context_manager.summarize_files_urls(source)
+
+                if summary_generation_ok:
+                    list_input_sources.append(source)
+                    list_input_content.append(summary_result)
+            
+            if len(list_input_content) == 0:
+                return ""
+            
+            try:
+                # Build context for generating a text from summary chunks
+                instructions_summarization =   f"""Task:\n
+                    - You are a summarization assistant.\n
+                    - Your goal is to write a summary of a list of given texts that represent a docuemnt.\n
+                    Summarization Requirements:\n
+                    - Preserve the information that are given inside the texts\n
+                    - Use a neutral language that is well understandable\n
+                    - Format your summary well for goo readability\n
+                    - Do not refer to this given task\n
+                    - Write your summary as a list of points if neccessary\n
+                    - Use line breaks if neccessary for longer summaries\n
+                    - Use markdown formatting for good readability\n
+                    Output Format:\n
+                    - Provide only the summary - no explanations or extra text.\n"""
+
+                if context_manager.summarize_additional_prompt != "":
+                    instructions_summarization += f"\nAdditional Prompt:\n{context_manager.summarize_additional_prompt}\n"
+
+                instructions_summarization += "\nText list:\n"
+
+                # Assemble summary content
+                for i in range(len(list_input_content)):
+                    instructions_summarization += f"\nText source: {list_input_sources[i]}\n"
+                    instructions_summarization += f"Content to summarize: {list_input_content[i]}\n"
+                    instructions_summarization += "###\n"
+
+                instructions_summarization += "\nSummary:\n"
+
+                # Invoke inference for summarization
+                input_msg_summarization = [
+                        {
+                            "role": "user",
+                            "content": instructions_summarization,
+                        }
+                    ]
+                return input_msg_summarization
+                
+            except Exception as e:
+                return ""
+
         async def event_generator(generator, sources=None):
             for element in generator:
                 yield element.model_dump_json()
@@ -316,7 +372,7 @@ class Chatshell:
                         return EventSourceResponse(event_generator(stream_response))
 
                 if command == "/webchat":
-                    if "/deep" in last_user_message:
+                    if args[0] == "/deep":
                         # If deep flag -> args must be 2
                         deep_crawl = True
 
@@ -330,7 +386,7 @@ class Chatshell:
                         deep_crawl = False
 
                         if len(args) != 1:
-                            stream_response = generate_chat_completion_chunks("Usage: /chatwithwebsite <URLs>")
+                            stream_response = generate_chat_completion_chunks("Usage: /webchat <URLs>")
                             return EventSourceResponse(event_generator(stream_response))
 
                         com_index = 0
@@ -364,79 +420,45 @@ class Chatshell:
                         return EventSourceResponse(event_generator(stream_response))
                     
                 if command == "/summarize":
-                    context_manager.summarize_additional_prompt = ""
-                    use_add_prompt = False
 
-                    # Regex to match /prompt:"...prompt text..." at the end
-                    prompt_pattern = r'/prompt:"([^"]+)"\s*$'
-
-                    # Check if /prompt is present at the end of the message
-                    prompt_match = re.search(prompt_pattern, last_user_message)
-                    if prompt_match:
-                        context_manager.summarize_additional_prompt = prompt_match.group(1)
-                        use_add_prompt = True
-                        # Remove the /prompt:"..." part from args for further processing
-                        # Remove last arg if it is /prompt:"..."
-                        if args and args[-1].startswith('/prompt:'):
-                            args = args[:-1]
+                    if args[0] == "/setprompt":
+                        # Add additional prompt for summarization
+                        context_manager.summarize_additional_prompt = " ".join(last_user_message.split()[2:]).replace("\"", "")
+                        stream_response = generate_chat_completion_chunks("Additional prompt for summarization set, you can now request a summary.")
+                        return EventSourceResponse(event_generator(stream_response))
 
                     if len(args) != 1:
-                        stream_response = generate_chat_completion_chunks("Usage: /summarize <Path to PDF URL> (/prompt:\"Additional instructions for summarization\")")
+                        stream_response = generate_chat_completion_chunks("Usage: /summarize <Path to PDF URL>\nYou can also set an additional prompt with /summarize /setprompt \"Additional instructions for summarization\" before invoking a summary.")
                         return EventSourceResponse(event_generator(stream_response))
-                   
+                
                     else:
                         if not endpoint_avail():
                             # No public OpenAI connection configured and local endpoint not available
                             stream_response = generate_chat_completion_chunks("There is no LLM inference endpoint available. Please configure first and try again.")
                             return EventSourceResponse(event_generator(stream_response))
 
-                        input_path_url = args[0]
-                        summary_result , summary_generation_ok = context_manager.summarize_files_urls(input_path_url)
+                        context_manager.summarize_input = args[0]
+                        input_path_urls = context_manager.summarize_input.split(";")
 
-                        if not summary_generation_ok:
-                            stream_response = generate_chat_completion_chunks(summary_result)
-                            return EventSourceResponse(event_generator(stream_response))
-                        
                         try:
-                            # Build context for generating a text from summary chunks
-                            instructions_summarization =   f"""Task:\n
-                                - You are a summarization assistant.\n
-                                - Your goal is to write a summary of a list of given texts that represent a docuemnt.\n
-                                Rewrite Requirements:\n
-                                - Preserve the information that are given inside the texts\n
-                                - Use a neutral language that is well understandable\n
-                                - Format your summary well for goo readability\n
-                                - Do not refer to this given task\n
-                                - Write your summary as a list of points if neccessary\n
-                                - Use line breaks if neccessary for longer summaries\n
-                                - Use markdown formatting for good readability\n
-                                Output Format:\n
-                                - Provide only the summary - no explanations or extra text.\n"""
+                            input_summarization = generate_text_summary_chunks(input_path_urls)
 
-                            if use_add_prompt and context_manager.summarize_additional_prompt != "":
-                                instructions_summarization += f"\nAdditional Prompt:\n{context_manager.summarize_additional_prompt}\n"
-
-                            instructions_summarization += f"Text list:\n{summary_result}\nSummary:\n"
-
-                            # Invoke inference for summarization
-                            input_msg_summarization = [
-                                    {
-                                        "role": "user",
-                                        "content": instructions_summarization,
-                                    }
-                                ]
+                            if input_summarization == "":
+                                stream_response = generate_chat_completion_chunks(f"There is no content available for generating a summary.")
+                                return EventSourceResponse(event_generator(stream_response))
                         
                             response_summarization = client.chat.completions.create(
                                                     model=payload.get("model", "generic"),
-                                                    messages=input_msg_summarization,
+                                                    messages=input_summarization,
                                                     stream=True,
                                                     temperature=0.1,
                                                 )
+                            
+                            return EventSourceResponse(event_generator(response_summarization))
+                        
                         except Exception as e:
                             stream_response = generate_chat_completion_chunks(f"There was an error while creating the summary: {str(e)}")
                             return EventSourceResponse(event_generator(stream_response))
-
-                        return EventSourceResponse(event_generator(response_summarization))
                         
                 if command == "/addclipboard":
                     # Add all clipboard content to context list
@@ -456,7 +478,7 @@ class Chatshell:
                         rag_persist_ok = context_manager.persist_task(args[1], args[0][1:])
 
                         if rag_persist_ok:
-                            stream_response = generate_chat_completion_chunks(f"Persisting task was successful. Content can be reloaded with /loadtask {args[0]}.")
+                            stream_response = generate_chat_completion_chunks(f"Persisting task was successful. Content can be reloaded with /loadtask {args[1]}.")
                             return EventSourceResponse(event_generator(stream_response))
                         else:
                             stream_response = generate_chat_completion_chunks("Persisting task was not successful. Please try again.")
@@ -466,37 +488,72 @@ class Chatshell:
                         sum_persist_ok = context_manager.persist_task(args[1], "summarize")
 
                         if sum_persist_ok:
-                            stream_response = generate_chat_completion_chunks(f"Persisting task was successful. Content can be reloaded with /loadtask {args[0]}.")
+                            stream_response = generate_chat_completion_chunks(f"Persisting task was successful. Content can be reloaded with /loadtask {args[1]}.")
                             return EventSourceResponse(event_generator(stream_response))
                         else:
                             stream_response = generate_chat_completion_chunks("Persisting task was not successful. Please try again.")
                             return EventSourceResponse(event_generator(stream_response))
                     
                     else:
-                        stream_response = generate_chat_completion_chunks("Usage: /savetask /<Task type> <Task name>\nPossible task types: /file, /web, /summary")
+                        stream_response = generate_chat_completion_chunks("Usage: /savetask /<Task type> <Task name>\nPossible task types: /file, /web, /summarize")
                         return EventSourceResponse(event_generator(stream_response))
-                        
-                        
-                if command == "/loadtask":
+     
+                if command == "/runtask":
                     if len(args) != 1:
-                        stream_response = generate_chat_completion_chunks("Usage: /loadtask <Task name>")
+                        stream_response = generate_chat_completion_chunks("Usage: /runtask <Task name>")
                         return EventSourceResponse(event_generator(stream_response))
 
                     else:
                         task_load_res = context_manager.load_task(args[0])
 
-                        if task_load_res != "ok":
+                        if task_load_res == "db_err":
+                            stream_response = generate_chat_completion_chunks("Loading task was not successful, the database does not exist or is write protected.")
+                            return EventSourceResponse(event_generator(stream_response))
+                        elif task_load_res == "not_existing":
+                            stream_response = generate_chat_completion_chunks(f"Loading task was not successful because the task {args[0]} does not exist.")
+                            return EventSourceResponse(event_generator(stream_response))
+                        elif task_load_res == "error":
+                            stream_response = generate_chat_completion_chunks("Loading task was not successful. Please try again.")
+                            return EventSourceResponse(event_generator(stream_response))
+                        
+                        if task_load_res == "ok":
+                            # Run the task according to task type
+                            if context_manager.task_type == "web" or context_manager.task_type == "file":
+                                # Vectorstore was automatically loaded
+                                pass
+                            elif context_manager.task_type == "summarize":
+                                # Create summary
+                                if not endpoint_avail():
+                                    # No public OpenAI connection configured and local endpoint not available
+                                    stream_response = generate_chat_completion_chunks("There is no LLM inference endpoint available. Please configure first and try again.")
+                                    return EventSourceResponse(event_generator(stream_response))
+
+                                input_path_urls = context_manager.summarize_input.split(";")
+
+                                try:
+                                    input_summarization = generate_text_summary_chunks(input_path_urls)
+
+                                    if input_summarization == "":
+                                        stream_response = generate_chat_completion_chunks(f"There is no content available for generating a summary.")
+                                        return EventSourceResponse(event_generator(stream_response))
+                                
+                                    response_summarization = client.chat.completions.create(
+                                                            model=payload.get("model", "generic"),
+                                                            messages=input_summarization,
+                                                            stream=True,
+                                                            temperature=0.1,
+                                                        )
+                                    
+                                    return EventSourceResponse(event_generator(response_summarization))
+                                
+                                except Exception as e:
+                                    stream_response = generate_chat_completion_chunks(f"There was an error while creating the summary: {str(e)}")
+                                    return EventSourceResponse(event_generator(stream_response))
+
+
                             stream_response = generate_chat_completion_chunks(f"Loading task {args[0]} was successful.")
                             return EventSourceResponse(event_generator(stream_response))
-                        elif task_load_res != "db_err":
-                            stream_response = generate_chat_completion_chunks("Loading RAG task was not successful, the database does not exist or is write protected.")
-                            return EventSourceResponse(event_generator(stream_response))
-                        elif task_load_res != "not_existing":
-                            stream_response = generate_chat_completion_chunks(f"Loading RAG task was not successful because the task {args[0]} does not exist.")
-                            return EventSourceResponse(event_generator(stream_response))
-                        else:
-                            stream_response = generate_chat_completion_chunks("Loading RAG task was not successful. Please try again.")
-                            return EventSourceResponse(event_generator(stream_response))
+
                 
                 if command == "/forgetall":
                     # Disable RAG and other inserted contexts
@@ -688,6 +745,7 @@ class Chatshell:
                 
                 if command == "/exit":
                     # Quit chatshell server
+                    llm_server.stop_all_processes()
                     quit()
                 
                 # ========================================

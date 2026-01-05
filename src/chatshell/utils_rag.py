@@ -12,6 +12,13 @@ def crawl_website(url: str, timeout: int, max_depth: int = 1):
 
     DEFAULT_TARGET_CONTENT = ['article', 'div', 'main', 'p']
     strip_elements = ['a']
+    headers = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/121.0.6167.185 Safari/537.36"
+    )
+}
     visited = set()
     results = []
 
@@ -21,7 +28,7 @@ def crawl_website(url: str, timeout: int, max_depth: int = 1):
         visited.add(current_url)
         try:
             print(f"--> Crawling: {current_url} (depth {depth})")
-            response = requests.get(current_url, timeout=timeout)
+            response = requests.get(current_url, timeout=timeout, headers=headers)
         except requests.exceptions.RequestException as e:
             print(f"-->  Request error for {current_url}: {e}")
             return
