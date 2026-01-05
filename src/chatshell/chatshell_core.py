@@ -266,7 +266,9 @@ class Chatshell:
                 # ==== Start command control sequence ====
 
                 tokens = last_user_message.split()
+                # First part of message before first whitespace
                 command = tokens[0].lower()
+                # All following parts after first whitespace
                 args = tokens[1:]
 
                 if command == "/help":
@@ -275,10 +277,10 @@ class Chatshell:
                                     "| Command | Description |\n"
                                     "|---------|-------------|\n"
                                     "| `/help` | Show this help message |\n"
-                                    "| `/chatwithfile <filename.pdf>` | Load a PDF or text file and chat with it |\n"
-                                    "| `/chatwithwebsite <URL>` | Load a website and chat with it |\n"
-                                    "| `/chatwithwebsite /deep <URL>` | Load a website, visit all sublinks, and chat with it |\n"
-                                    "| `/chatwithclipbrd` | Fetch content from clipboard and chat with the contents |\n"
+                                    "| `/filechat <filename.pdf>` | Load a PDF or text file and chat with it |\n"
+                                    "| `/webchat <URL>` | Load a website and chat with it |\n"
+                                    "| `/webchat /deep <URL>` | Load a website, visit all sublinks, and chat with it |\n"
+                                    "| `/clipchat` | Fetch content from clipboard and chat with the contents |\n"
                                     "| `/summarize <filename.pdf or URL>` | Summarize a document or website and chat with the summary |\n"
                                     "| `/summarize /clipboard` | Summarize the contents of the clipboard and chat with the summary |\n"
                                     "| `/addclipboard` | Add the content of the clipboard to every message in the chat |\n"
@@ -301,9 +303,9 @@ class Chatshell:
                     stream_response = generate_chat_completion_chunks(command_list)
                     return EventSourceResponse(event_generator(stream_response))
 
-                if command == "/chatwithfile":
+                if command == "/filechat":
                     if len(args) != 1:
-                        stream_response = generate_chat_completion_chunks("Usage: /chatwithfile <Path to PDF or txt file>")
+                        stream_response = generate_chat_completion_chunks("Usage: /filechat <Path to PDF or txt file>")
                         return EventSourceResponse(event_generator(stream_response))
 
                     else:
@@ -313,13 +315,13 @@ class Chatshell:
                         stream_response = generate_chat_completion_chunks(output_msg)
                         return EventSourceResponse(event_generator(stream_response))
 
-                if command == "/chatwithwebsite":
+                if command == "/webchat":
                     if "/deep" in last_user_message:
                         # If deep flag -> args must be 2
                         deep_crawl = True
 
                         if len(args) != 2:
-                            stream_response = generate_chat_completion_chunks("Usage: /chatwithwebsite /deep <URLs>")
+                            stream_response = generate_chat_completion_chunks("Usage: /webchat /deep <URLs>")
                             return EventSourceResponse(event_generator(stream_response))
 
                         com_index = 1
@@ -343,8 +345,7 @@ class Chatshell:
                         stream_response = generate_chat_completion_chunks(f"There was an error while reading the document {args[com_index]}, please try again.")
                         return EventSourceResponse(event_generator(stream_response))
 
-                if command == "/chatwithclipbrd":
-
+                if command == "/clipchat":
                     # Handle as Clipboard content
                     clip_content = get_text_clipboard()
                     if clip_content != None:
@@ -363,7 +364,7 @@ class Chatshell:
                         return EventSourceResponse(event_generator(stream_response))
                     
                 if command == "/summarize":
-                    additional_prompt = ""
+                    context_manager.summarize_additional_prompt = ""
                     use_add_prompt = False
 
                     # Regex to match /prompt:"...prompt text..." at the end
@@ -372,7 +373,7 @@ class Chatshell:
                     # Check if /prompt is present at the end of the message
                     prompt_match = re.search(prompt_pattern, last_user_message)
                     if prompt_match:
-                        additional_prompt = prompt_match.group(1)
+                        context_manager.summarize_additional_prompt = prompt_match.group(1)
                         use_add_prompt = True
                         # Remove the /prompt:"..." part from args for further processing
                         # Remove last arg if it is /prompt:"..."
@@ -388,61 +389,16 @@ class Chatshell:
                             # No public OpenAI connection configured and local endpoint not available
                             stream_response = generate_chat_completion_chunks("There is no LLM inference endpoint available. Please configure first and try again.")
                             return EventSourceResponse(event_generator(stream_response))
-                
-                        chunk_list = []
+
                         input_path_url = args[0]
+                        summary_result , summary_generation_ok = context_manager.summarize_files_urls(input_path_url)
 
-                        # Check if argument is clipboard content
-                        if "/clipboard" in input_path_url:
-                            # Handle as Clipboard content
-                            clip_content = get_text_clipboard()
-                            if clip_content != None:
-                                chunk_list = [clip_content]
-                            else:
-                                stream_response = generate_chat_completion_chunks(f"The clipboard is empty or not valid text content.")
-                                return EventSourceResponse(event_generator(stream_response))
-
-                        # Use is_url to check if input_path_url is a URL or a file path
-                        elif is_url(input_path_url):
-                            # Handle as URL
-                            # Crawl website
-                            print(f"-> Crawling {input_path_url}.")
-                            from vectorstore import crawl_website
-                            page_contents = crawl_website(input_path_url, 5, max_depth=1)
-
-                            if page_contents is not None and len(page_contents) > 0:
-
-                                for page_text, page_url in page_contents:
-                                    chunk_list.append(page_text)
-
-                        else:
-                            # Handle as file path
-                            doc_current = input_path_url
-
-                            if not os.path.isfile(doc_current):
-                                # Document is not available at absolute path, checking rel. path
-                                doc_current = os.path.join(self.doc_base_dir, doc_current)
-                                if not os.path.isfile(doc_current):
-                                    # Document is not available -> return error
-                                    print(f"--> Document {input_path_url} not found.")
-                                    stream_response = generate_chat_completion_chunks(f"The document {input_path_url} was not found.\nPlease enter a valid document path.")
-                                    return EventSourceResponse(event_generator(stream_response))
-
-                            # --> Read PDF pages into chunk list
-                            reader = PdfReader(doc_current)
-
-                            # Load each page's text into a list, one entry per page
-                            for page in reader.pages:
-                                text = page.extract_text()
-                                chunk_list.append(text)
-
+                        if not summary_generation_ok:
+                            stream_response = generate_chat_completion_chunks(summary_result)
+                            return EventSourceResponse(event_generator(stream_response))
+                        
                         try:
-                            # Create summary
-                            print("--> Start summarization...")
-                            text_summary = context_manager.rag_provider.generate_text_summary(chunk_list)
-                            print("--> Generated summary chunks.")
-
-                            # Build context
+                            # Build context for generating a text from summary chunks
                             instructions_summarization =   f"""Task:\n
                                 - You are a summarization assistant.\n
                                 - Your goal is to write a summary of a list of given texts that represent a docuemnt.\n
@@ -457,10 +413,10 @@ class Chatshell:
                                 Output Format:\n
                                 - Provide only the summary - no explanations or extra text.\n"""
 
-                            if use_add_prompt and additional_prompt:
-                                instructions_summarization += f"\nAdditional Prompt:\n{additional_prompt}\n"
+                            if use_add_prompt and context_manager.summarize_additional_prompt != "":
+                                instructions_summarization += f"\nAdditional Prompt:\n{context_manager.summarize_additional_prompt}\n"
 
-                            instructions_summarization += f"Text list:\n{text_summary}\nSummary:\n"
+                            instructions_summarization += f"Text list:\n{summary_result}\nSummary:\n"
 
                             # Invoke inference for summarization
                             input_msg_summarization = [
@@ -494,6 +450,53 @@ class Chatshell:
                     else:
                         stream_response = generate_chat_completion_chunks(f"The clipboard is empty or not valid text content.")
                         return EventSourceResponse(event_generator(stream_response))
+                    
+                if command == "/savetask":
+                    if args[0] == "/file" or args[0] == "/web":
+                        rag_persist_ok = context_manager.persist_task(args[1], args[0][1:])
+
+                        if rag_persist_ok:
+                            stream_response = generate_chat_completion_chunks(f"Persisting task was successful. Content can be reloaded with /loadtask {args[0]}.")
+                            return EventSourceResponse(event_generator(stream_response))
+                        else:
+                            stream_response = generate_chat_completion_chunks("Persisting task was not successful. Please try again.")
+                            return EventSourceResponse(event_generator(stream_response))
+
+                    elif args[0] == "/summarize":
+                        sum_persist_ok = context_manager.persist_task(args[1], "summarize")
+
+                        if sum_persist_ok:
+                            stream_response = generate_chat_completion_chunks(f"Persisting task was successful. Content can be reloaded with /loadtask {args[0]}.")
+                            return EventSourceResponse(event_generator(stream_response))
+                        else:
+                            stream_response = generate_chat_completion_chunks("Persisting task was not successful. Please try again.")
+                            return EventSourceResponse(event_generator(stream_response))
+                    
+                    else:
+                        stream_response = generate_chat_completion_chunks("Usage: /savetask /<Task type> <Task name>\nPossible task types: /file, /web, /summary")
+                        return EventSourceResponse(event_generator(stream_response))
+                        
+                        
+                if command == "/loadtask":
+                    if len(args) != 1:
+                        stream_response = generate_chat_completion_chunks("Usage: /loadtask <Task name>")
+                        return EventSourceResponse(event_generator(stream_response))
+
+                    else:
+                        task_load_res = context_manager.load_task(args[0])
+
+                        if task_load_res != "ok":
+                            stream_response = generate_chat_completion_chunks(f"Loading task {args[0]} was successful.")
+                            return EventSourceResponse(event_generator(stream_response))
+                        elif task_load_res != "db_err":
+                            stream_response = generate_chat_completion_chunks("Loading RAG task was not successful, the database does not exist or is write protected.")
+                            return EventSourceResponse(event_generator(stream_response))
+                        elif task_load_res != "not_existing":
+                            stream_response = generate_chat_completion_chunks(f"Loading RAG task was not successful because the task {args[0]} does not exist.")
+                            return EventSourceResponse(event_generator(stream_response))
+                        else:
+                            stream_response = generate_chat_completion_chunks("Loading RAG task was not successful. Please try again.")
+                            return EventSourceResponse(event_generator(stream_response))
                 
                 if command == "/forgetall":
                     # Disable RAG and other inserted contexts
@@ -656,9 +659,8 @@ class Chatshell:
                     # RAG Status
                     tmp_rag = []
                     tmp_rag.append(f"- **Enabled:** {'Yes' if rag_enabled else 'No'}")
-                    rag_mode_str = {0: "File", 1: "Web", 2: "Clipboard"}.get(context_manager.rag_mode, "Unknown")
                     if rag_enabled:
-                        tmp_rag.append(f"- **Mode:** {rag_mode_str}")
+                        tmp_rag.append(f"- **Mode:** {context_manager.task_type}")
                     tmp_rag.append(f"- **Loaded Content:** {context_manager.rag_content_list if context_manager.rag_content_list else 'None'}")
                     tmp_rag.append(f"- **Last Update:** {context_manager.rag_update_time if context_manager.rag_update_time else 'Never'}")
                     status_message += "\n".join(tmp_rag) + "\n"
@@ -679,6 +681,11 @@ class Chatshell:
                     stream_response = generate_chat_completion_chunks(f"This chat is now marked as shell-chat, no LLM interaction will be performed on future inputs.")
                     return EventSourceResponse(event_generator(stream_response))
 
+                if command == "/version":
+                    # Output application version
+                    stream_response = generate_chat_completion_chunks(f"Chatshell application version: {self.version}")
+                    return EventSourceResponse(event_generator(stream_response))
+                
                 if command == "/exit":
                     # Quit chatshell server
                     quit()
