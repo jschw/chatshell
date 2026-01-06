@@ -7,12 +7,9 @@ from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai.types.chat.chat_completion_chunk import Choice, ChoiceDelta
 from pathlib import Path
 from urllib.parse import urlparse
-from PyPDF2 import PdfReader
-import os, appdirs, time, json, uuid, re
-from datetime import datetime
+import os, appdirs, time, json, uuid
 from multiprocessing import Process, Event
 import pyperclip
-import sys
 from .llm_server import LocalLLMServer
 from .context_manager import ContextManager
 
@@ -84,13 +81,19 @@ class Chatshell:
         self.doc_base_dir.mkdir(parents=True, exist_ok=True)
 
         self.command_list = [
-            "/chatwithfile",
-            "/chatwithwebsite",
-            "/forgetcontext"
+            "/filechat",
+            "/webchat",
+            "/clipchat",
+            "/status",
+            "/llmstatus",
+            "/forgetcontext",
+            "/savetask",
+            "/listtasks",
+            "/taskinfo"
         ]
 
         # Start LLM server
-        llm_server                  = LocalLLMServer(termux_paths=self.termux)
+        llm_server             = LocalLLMServer(termux_paths=self.termux)
         llm_config_path        = llm_server.get_llm_config_path()
         llm_server_config_path = llm_server.get_llm_server_config_path()
 
@@ -340,7 +343,12 @@ class Chatshell:
                                     "| `/clipchat` | Fetch content from clipboard and chat with the contents |\n"
                                     "| `/summarize <filename.pdf or URL>` | Summarize a document or website and chat with the summary |\n"
                                     "| `/summarize /clipboard` | Summarize the contents of the clipboard and chat with the summary |\n"
+                                    "| `/summarize /setprompt \"Additional prompt for summary\"` | Add an additional prompt for customizing your summary |\n"
                                     "| `/addclipboard` | Add the content of the clipboard to every message in the chat |\n"
+                                    "| `/savetask /<Task type> <Task name>` | Save the current task (file, web, summarize) |\n"
+                                    "| `/runtask <Task name>` | Load and run a saved task |\n"
+                                    "| `/listtasks` | List all saved tasks |\n"
+                                    "| `/taskinfo <Task name>` | Show detailed info for a specific task |\n"
                                     "| `/forgetcontext` | Disable background injection of every kind of content |\n"
                                     "| `/forgetall` | Disable RAG and all inserted contexts |\n"
                                     "| `/forgetctx` | Disable inserted context only |\n"
@@ -744,6 +752,17 @@ class Chatshell:
                     stream_response = generate_chat_completion_chunks(format_model_list(models_avail))
                     return EventSourceResponse(event_generator(stream_response))
                 
+                if command == "/getconfigpaths":
+                    # Outputs the paths of the config files
+                    tmp_config_paths = []
+                    tmp_config_paths.append(f"- **Chatshell config:** {self.chatshell_config_path}")
+                    tmp_config_paths.append(f"- **Document path:** {self.doc_base_dir}")
+                    tmp_config_paths.append(f"- **LLM server config:** {llm_server_config_path}")
+                    tmp_config_paths.append(f"- **LLM model config:** {llm_config_path}")
+
+                    stream_response = generate_chat_completion_chunks("\n".join(tmp_config_paths))
+                    return EventSourceResponse(event_generator(stream_response))
+                
                 if command == "/status":
                     # Outputs the status of the system overall context + RAG + LLM server
                     status_message = (
@@ -793,7 +812,6 @@ class Chatshell:
 
                     stream_response = generate_chat_completion_chunks(status_message)
                     return EventSourceResponse(event_generator(stream_response))
- 
 
                 if command == "/shellmode":
                     # Activate shell mode for specific chat by inserting the keyword

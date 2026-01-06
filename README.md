@@ -6,6 +6,7 @@
 **Chatshell** is a free and open-source application that provides **local Large Language Models (LLMs)** combined with **advanced Retrieval-Augmented Generation (RAG)** and **operating system integrations** - all controlled through a **chat-based, Discord-like interface**.
 
 It runs quietly in the background and acts as a **middleware layer between the user, the operating system and AI models**, turning chat conversations into powerful, reproducible AI workflows.
+Custom tasks can be created e.g. for summarization or updating the RAG context and run them with one single command.
 
 No cloud lock-in.  
 No hidden APIs.  
@@ -18,7 +19,7 @@ No dependency on big tech platforms.
 - **Workflow-Oriented** - Chat is not just conversation, it’s orchestration  
 - **Discord-like Interaction** - Commands and conversation live side-by-side
 - **User Interface Idependent** - Every OpenAI-compatible Chat UI can be used (e.g. Jan or OpenWebUI)
-- **Composable AI** - Combine tools, context, and models in a single chat flow 
+- **Composable AI** - Combine tools, context, and models in a single chat flow and define Tasks
 - **Advanced RAG** - Chat with documents, websites, clipboard content, and more
 - **Open Source & Independent** - No vendor lock-in, no proprietary backends
 - **Local & Private** - Run everything entirely on your machine  
@@ -84,6 +85,7 @@ Commands are embedded directly into the chat flow, enabling:
 * Chat with websites (shallow or deep crawl)
 * Summarize documents or URLs
 * Inject clipboard content into conversations
+* Define tasks for summarization
 
 ### Middleware Capabilities
 
@@ -181,27 +183,31 @@ You're ready now!
 | Command                            | Description                                 |
 | ---------------------------------- | ------------------------------------------- |
 | `/help`                            | Show this help message                      |
-| `/chatwithfile <filename.pdf>`     | Load a PDF or text file and chat with it    |
-| `/chatwithwebsite <URL>`           | Load a website and chat with it             |
-| `/chatwithwebsite /deep <URL>`     | Load a website and all sublinks, then chat  |
-| `/chatwithclipbrd`                 | Fetch clipboard content and chat with it    |
-| `/summarize <filename.pdf or URL>` | Summarize a document or website             |
-| `/summarize /clipboard`            | Summarize clipboard contents                |
-| `/addclipboard`                    | Inject clipboard content into every message |
-| `/forgetcontext`                   | Disable all background context injection    |
-| `/forgetall`                       | Disable RAG and all inserted contexts       |
-| `/forgetctx`                       | Disable inserted context only               |
-| `/forgetdoc`                       | Disable document/website RAG only           |
-| `/updatemodels`                    | Update model catalog from GitHub            |
-| `/startendpoint <name>`            | Start a specific LLM endpoint               |
-| `/restartendpoint <name>`          | Restart an LLM endpoint                     |
-| `/stopendpoint <name>`             | Stop an LLM endpoint                        |
-| `/stopallendpnts`                  | Stop all LLM endpoints                      |
-| `/llmstatus`                       | Show endpoint status                        |
-| `/setautostartendpoint <name>`     | Set endpoint for autostart                  |
-| `/listendpoints`                   | List all endpoint configs                   |
-| `/shellmode`                       | Enter shell-only mode (no LLM)              |
-| `/exit`                            | Quit Chatshell                              |
+| `/filechat <filename.pdf>`          | Load a PDF or text file and chat with it    |
+| `/webchat <URL>`                    | Load a website and chat with it             |
+| `/webchat /deep <URL>`              | Load a website and all sublinks, then chat  |
+| `/clipchat`                         | Fetch clipboard content and chat with it    |
+| `/summarize <filename.pdf or URL>`  | Summarize a document or website             |
+| `/summarize /clipboard`             | Summarize clipboard contents                |
+| `/summarize /setprompt "Additional prompt for summary"` | Add an additional prompt for customizing your summary |
+| `/addclipboard`                     | Inject clipboard content into every message |
+| `/savetask /<Task type> <Task name>`| Save the current task (file, web, summarize)|
+| `/runtask <Task name>`              | Load and run a saved task                   |
+| `/listtasks`                        | List all saved tasks                        |
+| `/taskinfo <Task name>`             | Show detailed info for a specific task      |
+| `/forgetall`                        | Disable RAG and all inserted contexts       |
+| `/forgetctx`                        | Disable inserted context only               |
+| `/forgetdoc`                        | Disable document/website RAG only           |
+| `/updatemodels`                     | Update model catalog from GitHub            |
+| `/startendpoint <name>`             | Start a specific LLM endpoint               |
+| `/restartendpoint <name>`           | Restart an LLM endpoint                     |
+| `/stopendpoint <name>`              | Stop an LLM endpoint                        |
+| `/stopallendpnts`                   | Stop all LLM endpoints                      |
+| `/llmstatus`                        | Show endpoint status                        |
+| `/setautostartendpoint <name>`      | Set endpoint for autostart                  |
+| `/listendpoints`                    | List all endpoint configs                   |
+| `/shellmode`                        | Enter shell-only mode (no LLM)              |
+| `/exit`                             | Quit Chatshell                              |
 
 
 ---
