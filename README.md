@@ -5,12 +5,18 @@
 
 **Chatshell** is a free and open-source application that provides **local Large Language Models (LLMs)** combined with **advanced Retrieval-Augmented Generation (RAG)** and **operating system integrations** - all controlled through a **chat-based, Discord-like interface**.
 
+<div align="center">
+  <img src="./assets/architecture_overview.png" alt="Logo" width="700">
+</div>
+
 It runs quietly in the background and acts as a **middleware layer between the user, the operating system and AI models**, turning chat conversations into powerful, reproducible AI workflows.
 Custom tasks can be created e.g. for summarization or updating the RAG context and run them with one single command.
 
 No cloud lock-in.  
 No hidden APIs.  
 No dependency on big tech platforms.
+
+Introduction article: 
 
 ---
 
@@ -148,7 +154,6 @@ cmake -B build
 cmake --build build --config Release
 ```
 
->**Note:** This should also work in Termux on Android if you have installed all requirements. You can use the provided script termux_compile_llamacpp.sh.
 ---
 
 ## 🖥️ Usage
@@ -180,24 +185,19 @@ You're ready now!
 
 ## 📚 Available Commands
 
+### General commands
+
 | Command                            | Description                                 |
 | ---------------------------------- | ------------------------------------------- |
 | `/help`                            | Show this help message                      |
-| `/filechat <filename.pdf>`          | Load a PDF or text file and chat with it    |
-| `/webchat <URL>`                    | Load a website and chat with it             |
-| `/webchat /deep <URL>`              | Load a website and all sublinks, then chat  |
-| `/clipchat`                         | Fetch clipboard content and chat with it    |
-| `/summarize <filename.pdf or URL>`  | Summarize a document or website             |
-| `/summarize /clipboard`             | Summarize clipboard contents                |
-| `/summarize /setprompt "Additional prompt for summary"` | Add an additional prompt for customizing your summary |
-| `/addclipboard`                     | Inject clipboard content into every message |
-| `/savetask /<Task type> <Task name>`| Save the current task (file, web, summarize)|
-| `/runtask <Task name>`              | Load and run a saved task                   |
-| `/listtasks`                        | List all saved tasks                        |
-| `/taskinfo <Task name>`             | Show detailed info for a specific task      |
-| `/forgetall`                        | Disable RAG and all inserted contexts       |
-| `/forgetctx`                        | Disable inserted context only               |
-| `/forgetdoc`                        | Disable document/website RAG only           |
+| `/shellmode`                        | Enter shell-only mode (no LLM)              |
+| `/exit`                             | Quit Chatshell                              |
+
+
+### Llama.cpp server control commands
+
+| Command                            | Description                                 |
+| ---------------------------------- | ------------------------------------------- |
 | `/updatemodels`                     | Update model catalog from GitHub            |
 | `/startendpoint <name>`             | Start a specific LLM endpoint               |
 | `/restartendpoint <name>`           | Restart an LLM endpoint                     |
@@ -206,8 +206,33 @@ You're ready now!
 | `/llmstatus`                        | Show endpoint status                        |
 | `/setautostartendpoint <name>`      | Set endpoint for autostart                  |
 | `/listendpoints`                    | List all endpoint configs                   |
-| `/shellmode`                        | Enter shell-only mode (no LLM)              |
-| `/exit`                             | Quit Chatshell                              |
+
+
+### Chat with websites, documents and summarization
+
+| Command                            | Description                                 |
+| ---------------------------------- | ------------------------------------------- |
+| `/filechat <filename.pdf>`          | Load a PDF or text file and chat with it    |
+| `/webchat <URL>`                    | Load a website and chat with it             |
+| `/webchat /deep <URL>`              | Load a website and all sublinks, then chat  |
+| `/clipchat`                         | Fetch clipboard content and chat with it    |
+| `/summarize <filename.pdf or URL>`  | Summarize a document or website             |
+| `/summarize /clipboard`             | Summarize clipboard contents                |
+| `/summarize /setprompt "Promt"` | Add an additional prompt for customizing your summary |
+| `/addclipboard`                     | Inject clipboard content into every message |
+| `/forgetall`                        | Disable RAG and all inserted contexts       |
+| `/forgetctx`                        | Disable inserted context only               |
+| `/forgetdoc`                        | Disable document/website RAG only           |
+
+
+### Task control commands
+
+| Command                            | Description                                 |
+| ---------------------------------- | ------------------------------------------- |
+| `/savetask /<Task type> <Task name>`| Save the current task (file, web, summarize)|
+| `/runtask <Task name>`              | Load and run a saved task                   |
+| `/listtasks`                        | List all saved tasks                        |
+| `/taskinfo <Task name>`             | Show detailed info for a specific task      |
 
 
 ---
