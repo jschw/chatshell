@@ -16,7 +16,7 @@ No cloud lock-in.
 No hidden APIs.  
 No dependency on big tech platforms.
 
-Introduction article: 
+Introduction article: https://julianschweigert.medium.com/chatshell-an-interaction-layer-for-ai-tools-and-workflows-d9b37d260dec
 
 ---
 
