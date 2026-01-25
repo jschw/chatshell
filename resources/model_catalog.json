@@ -124,5 +124,23 @@
         "lora": "",
         "no-context-shift": "",
         "api-key": ""
+    },
+    {
+        "name": "Granite4",
+        "ip": "",
+        "port": "4000",
+        "model": "",
+        "hf-repo": "ibm-granite/granite-4.0-micro-GGUF",
+        "hf-file": "granite-4.0-micro-Q4_K_M.gguf",
+        "ctx-size": "",
+        "flash-attn": "",
+        "no-kv-offload": "",
+        "no-mmap": "",
+        "cache-type-k": "",
+        "cache-type-v": "",
+        "n-gpu-layers": "",
+        "lora": "",
+        "no-context-shift": "",
+        "api-key": ""
     }
 ]
