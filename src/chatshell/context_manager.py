@@ -11,6 +11,150 @@ from .utils_rag import crawl_website
 
 class ContextManager:
     """
+    Context manager for handling RAG context, RAG provider, and prompt management.
+    """
+    def __init__(self):
+        from .vectorstore import ChatshellVectorsearch
+        self.doc_base_dir = None
+
+        DB_DIR = Path(appdirs.user_config_dir(appname='chatshell'))
+        self.context_manager_db_path  = DB_DIR / 'context_manager.sqlite'
+
+        self.task_type          = ""
+
+        self.context_list       = []
+        self.context_active     = False
+        self.context_update_time = ""
+
+        self.rag_provider       = ChatshellVectorsearch()
+        self.rag_active         = False
+        self.rag_content_list   = []
+        self.rag_update_time    = ""
+
+        self.summarize_input    = ""
+        self.summarize_text     = ""
+        self.summarize_additional_prompt = ""
+
+        # Instruction management
+        self.instruction_list        = []
+
+    def save_instruction(self, instruction_name, instruction_content):
+        """
+        Save an instruction to the database if both name and content are provided.
+        Updates self.instruction_list by adding or updating the instruction.
+        """
+        if not instruction_name or not instruction_content:
+            print("Instruction name and content must be provided.")
+            return False
+        db_path = str(self.context_manager_db_path)
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        conn = sqlite3.connect(db_path)
+        try:
+            c = conn.cursor()
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS instructions (
+                    instruction_name TEXT PRIMARY KEY,
+                    instruction_content TEXT
+                )
+            """)
+            c.execute("""
+                INSERT INTO instructions (instruction_name, instruction_content)
+                VALUES (?, ?)
+                ON CONFLICT(instruction_name) DO UPDATE SET
+                    instruction_content=excluded.instruction_content
+            """, (instruction_name, instruction_content))
+            conn.commit()
+            return True
+
+        except Exception as e:
+            print(f"Error saving instruction: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def load_instruction(self, instruction_name):
+        """
+        Load an instruction by name from the database. Returns the instruction content or None.
+        Adds the loaded instruction to self.instruction_list if found and not already present.
+        """
+        db_path = str(self.context_manager_db_path)
+        if not os.path.exists(db_path):
+            print("DB not existing.")
+            return False
+        conn = sqlite3.connect(db_path)
+        try:
+            c = conn.cursor()
+            c.execute("""
+                SELECT instruction_content FROM instructions WHERE instruction_name = ?
+            """, (instruction_name,))
+            row = c.fetchone()
+            if row is not None:
+                # Only add if not already in instruction_list
+                if not any(i["instruction_name"] == instruction_name for i in self.instruction_list):
+                    self.instruction_list.append({"instruction_name": instruction_name, "instruction_content": row[0]})
+                return row[0]
+            else:
+                print(f"No instruction found for: {instruction_name}")
+                return False
+        except Exception as e:
+            print(f"Error loading instruction: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def list_all_instructions(self):
+        """
+        Returns a list of all instructions stored in the database. Each instruction is a dictionary with 'instruction_name' and 'instruction_content'.
+        """
+        db_path = str(self.context_manager_db_path)
+        if not os.path.exists(db_path):
+            print("DB not existing.")
+            return []
+        conn = sqlite3.connect(db_path)
+        instructions = []
+        try:
+            c = conn.cursor()
+            c.execute("SELECT instruction_name, instruction_content FROM instructions")
+            rows = c.fetchall()
+            for row in rows:
+                instructions.append({"instruction_name": row[0], "instruction_content": row[1]})
+        except Exception as e:
+            print(f"Error listing all instructions: {e}")
+            return []
+        finally:
+            conn.close()
+        return instructions
+
+    def get_instructions(self):
+        """
+        Returns a list of the content of all existing instructions in self.instruction_list.
+        """
+        return [instr["instruction_content"] for instr in self.instruction_list]
+
+    def delete_instruction(self, instruction_name):
+        """
+        Delete an instruction by name from the database and remove it from self.instruction_list.
+        """
+        db_path = str(self.context_manager_db_path)
+        if not os.path.exists(db_path):
+            print("DB not existing.")
+            return False
+        conn = sqlite3.connect(db_path)
+        try:
+            c = conn.cursor()
+            c.execute("DELETE FROM instructions WHERE instruction_name = ?", (instruction_name,))
+            deleted = c.rowcount > 0
+            conn.commit()
+            # Remove from list if present
+            self.instruction_list = [i for i in self.instruction_list if i["instruction_name"] != instruction_name]
+            return deleted
+        except Exception as e:
+            print(f"Error deleting instruction: {e}")
+            return False
+        finally:
+            conn.close()
+
+    """
     Context manager for handling RAG context and RAG provider.
     """
     def __init__(self):
@@ -343,6 +487,28 @@ class ContextManager:
         finally:
             conn.close()
         return tasks
+
+    def delete_task(self, taskname):
+        """
+        Deletes the task with the given taskname from the SQLite database.
+        Returns True if a row was deleted, False otherwise.
+        """
+        db_path = str(self.context_manager_db_path)
+        if not os.path.exists(db_path):
+            print("DB not existing.")
+            return False
+        conn = sqlite3.connect(db_path)
+        try:
+            c = conn.cursor()
+            c.execute("DELETE FROM tasks WHERE taskname = ?", (taskname,))
+            deleted = c.rowcount > 0
+            conn.commit()
+            return deleted
+        except Exception as e:
+            print(f"Error deleting task: {e}")
+            return False
+        finally:
+            conn.close()
 
     def get_task_info(self, taskname):
         """
